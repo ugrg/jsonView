@@ -11,19 +11,25 @@ var reg;
 reg = {
     "docType": /^<!.*?>/,
     "notes"  : /<!--.*-->/g,
-    'node'   : /<[^>]*>|[^\s][^<>]+/g
+    'node'   : /<[^>]*>|[^\s][^<>]*/g
 };
 
 /**
  * @description 获取节点名
  * @param {String} node
  * @returns {String}
+ * @example
+ *   in <tr>    out tr
+ *   in </tr>    out tr
+ *   in <tr/>    out tr
+ *   in <tr:f-or>    out tr:f-or
+ *   in </tr:f-or>    out tr:f-or
  */
 function getNodeName(node)
 {
     if (node.indexOf('<') == 0)
     {
-        return node.replace(/^</, '').replace(/^\//, '').replace(/\s.*$|>/, '');
+        return  /<(?:\/|)([\w:-]+)[^<>]*>/.exec(node)[1];
     }
     throw "Argument is not an XML node";
 }
@@ -260,10 +266,7 @@ function insertDB(format, DB)
             {
                 for (nodeName in node)
                 {
-
-                    DHtmlList.push(StringValueOf.call(this, nodeName, DB));
-                    DHtmlList.push(insertDB.call(this, node[nodeName], DB));
-                    DHtmlList.push("</" + getNodeName(nodeName) + ">");
+                    DHtmlList.push([StringValueOf.call(this, nodeName, DB), insertDB.call(this, node[nodeName], DB), "</" + getNodeName(nodeName) + ">"]);
                 }
                 break;
             }
@@ -302,9 +305,9 @@ function LinkHtmlList(htmlList, tab)
 {
     for (var i = 0; i < htmlList.length; i++)
     {
-        htmlList[i] = Object.prototype.toString.call(htmlList[i]) == "[object Array]" ? LinkHtmlList(htmlList[i], tab + '    ') : htmlList[i];
+        htmlList[i] = Object.prototype.toString.call(htmlList[i]) == "[object Array]" ? LinkHtmlList(htmlList[i], tab + '    ') : tab + htmlList[i];
     }
-    return htmlList.join("\n" + tab);
+    return htmlList.join("\n");
 }
 
 /**

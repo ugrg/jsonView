@@ -1,6 +1,6 @@
 {
     "name"       : "jsonview",
     "description": "json配合模板生页面",
-    "version"    : "0.0.1",
+    "version"    : "0.0.3",
     "main"       : "index.js"
 }
