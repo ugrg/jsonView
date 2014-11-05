@@ -21,7 +21,7 @@ path:
 * 1.for循环中的path必需是一个数组
 * 2.for循环内的代码,将会把数组中的每个对像设为当前路径,可使用path "." 获取当前值.
    
-## switch判断
+## switch判断:
 ```html
 <json:switch select="path">
   <case test="value1">
