@@ -106,7 +106,7 @@
             }
             default :
             {
-                throw "This is the node of an unknown type!";
+                throw "This type of node is unknown!";
             }
         }
     }
