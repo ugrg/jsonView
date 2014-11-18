@@ -8,7 +8,7 @@
 
 (function ()
 {
-    var reg = {
+    var Reg = {
         "docType": /^<!.*?>/,
         "notes"  : /<!--.*-->/g,
         'node'   : /<[^>]*>|[^\s][^<>]*/g
@@ -139,8 +139,7 @@
      */
     function StringValueOf(node, db)
     {
-        var reg;
-        reg = /{{("|'|)([\w\.-_]+)\1}}/g;
+        var reg = /{{("|'|)([\w\.-_]+)\1}}/g;
         var repList = node.match(reg);
         if (repList == null)
         {
@@ -216,7 +215,7 @@
      */
     function If(node, db)
     {
-        var path, html = [], value, n;
+        var path, html = [], value, n, reg;
         path = getPath(node, "test");
         for (n in node)
         {
@@ -370,8 +369,8 @@
     function docType(Template)
     {
         return {
-            "docType": reg.docType.exec(Template),
-            "html"   : Template.replace(reg, '').replace(reg.notes, '')
+            "docType": Reg.docType.exec(Template),
+            "html"   : Template.replace(Reg, '').replace(Reg.notes, '')
         };
     }
 
@@ -389,7 +388,7 @@
         var doc = docType(Template);
 
         //构造初始队列
-        var Templates = doc.html.match(reg.node);
+        var Templates = doc.html.match(Reg.node);
 
         //队列分层
         var HTMLObj = createHtml(Templates, '');
