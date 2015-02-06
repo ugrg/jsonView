@@ -5,14 +5,27 @@
  * Time: 上午10:25
  * 通过JSON与json模板生成HTML字符串方法。
  */
-
 (function ()
 {
-    var Reg = {
-        "docType": /^<!.*?>/,
-        "notes"  : /<!--.*-->/g,
-        'node'   : /<[^>]*>|[^\s][^<>]*/g
+    var REG_PATH = {
+        "value" : /value=("|')([\w\.]+)\1/g,
+        "select": /select=("|')([\w\.]+)\1/g,
+        "test"  : /test=("|')([\w\.]+)\1/g
     };
+    var REG_DOC_TYPE = /^<!.*?>/;
+    var REG_NODE = /<[^>]*>|[^\s][^<>]*/g;
+    var REG_VALUE_OF = /<json:valueOf\s+(?:[^<>]*\s+)*value=("|'|)([\w\.-_]+)\1(\s+[^<>]*)*\/>/;
+    var REG_IF_VALUE = /value=("|')([^\1]*)\1/g;
+    var REG_VOID_ELEMENTS = /<(input|img|br|hr|area|base|link|meta|basefont|param|col|frame|embed|keygen|source|!DOCTYPE)(\s+[^<>]*)*>/;
+    var REG_REPLACE = /^\./g;
+    var REG_GET_VALUE = /{{("|'|)([\w\.-_]+)\1}}/g;
+    var REG_NODE_NAME = /<(?:\/|)([\w:-]+)[^<>]*>/;
+    var EMPTY = "";
+    var OBJECT_ARR = "[object Array]";
+    var OBJECT_OBJ = "[object Object]";
+    var STRING = "string";
+    var OBJECT = "object";
+    var SELECT = "select";
 
     /**
      * @description 获取节点名
@@ -29,7 +42,8 @@
     {
         if (node.indexOf('<') == 0)
         {
-            return /<(?:\/|)([\w:-]+)[^<>]*>/.exec(node)[1];
+            REG_NODE_NAME.lastIndex = 0;
+            return REG_NODE_NAME.exec(node)[1];
         }
         throw "Argument is not an XML node";
     }
@@ -43,14 +57,16 @@
     function getPath(node, pathAttr)
     {
         var path = node, reg;
-        if (typeof node == "object")
+        if (Object.prototype.toString.call(node) == OBJECT_OBJ)
         {
             for (path in node)
             {
             }
         }
         if (path.indexOf("json:") == -1) throw "This node is not a json node";
-        reg = RegExp(pathAttr + "=(\"|')([\\w\\.]+)\\1", "g");
+        reg = REG_PATH[pathAttr];
+        if (reg === undefined)throw "The \"" + pathAttr + "\" attr reg was not found!";
+        reg.lastIndex = 0;
         path = reg.exec(path);
         if (path === null || path.length < 3)   throw "The value attribute was not found in this node!";
         return path[2];
@@ -64,7 +80,7 @@
     function getChildNode(node)
     {
         var path = node, child = [];
-        if (typeof node == "object")
+        if (Object.prototype.toString.call(node) == OBJECT_OBJ)
         {
             for (path in node)
             {
@@ -86,11 +102,10 @@
         {
             case "[object String]":
             {
-                return "valueOf";
+                return !REG_VALUE_OF.test(node) ? "valueOf" : "json:valueOf";
             }
             case "[object Object]":
             {
-                //n=getNodeName(node);
                 for (n in node)
                 {
                     if (n.indexOf("json:") != -1)
@@ -106,31 +121,32 @@
             }
             default :
             {
-                throw "This type of node is unknown!";
+                throw "This is the node of an unknown type!";
             }
         }
     }
 
     /**
-     * @description 解析{{valueOf}}
+     * @description 解析{{getValue}}
      * @param {String} _path
      * @param {object} db
      */
-    function valueOf(_path, db)
+    function getValue(_path, db)
     {
-        var root, name, path = _path.replace(/^\./g, '').split(".");
+        var root, name, path = _path.replace(REG_REPLACE, EMPTY).split(".");
         root = path[0] == "JSON" ? (path.shift(), db) : this;
         while (name = path.shift())
         {
             root = root[name];
-            if (typeof root == "undefined")
+            if (root === undefined)
             {
-                root = "";
+                root = EMPTY;
                 break;
             }
         }
-        return {"string": typeof root != "object" ? root : JSON.stringify(root), "object": root}
+        return {"string": Object.prototype.toString.call(root) != OBJECT_OBJ ? root : JSON.stringify(root), "object": root}
     }
+
 
     /**
      * @description 解析{{valueOf}}
@@ -139,8 +155,7 @@
      */
     function StringValueOf(node, db)
     {
-        var reg = /{{("|'|)([\w\.-_]+)\1}}/g;
-        var repList = node.match(reg);
+        var repList = node.match(REG_GET_VALUE);
         if (repList == null)
         {
             return node;
@@ -148,10 +163,10 @@
         var i, path = ".", valueOfList = [];
         for (i = 0; i < repList.length; i++)
         {
-            reg.lastIndex = 0;
-            path = reg.exec(repList[i])[2];
-            valueOfList.push(valueOf.call(this, path, db)["string"]);
-            node = node.replace(repList[i], valueOf.call(this, path, db)["string"])
+            REG_GET_VALUE.lastIndex = 0;
+            path = REG_GET_VALUE.exec(repList[i])[2];
+            valueOfList.push(getValue.call(this, path, db).string);
+            node = node.replace(repList[i], getValue.call(this, path, db).string)
         }
         return node;
     }
@@ -160,11 +175,12 @@
      * @description XML类型节点提前数据 <json:valueOf value=".v1"/>
      * @param node
      * @param db
+     * @return {String}
      */
     function XMLValueOf(node, db)
     {
         var path = getPath(node, "value");
-        return valueOf.call(this, path, db)["string"];
+        return getValue.call(this, path, db).string;
     }
 
     /**
@@ -176,9 +192,9 @@
     function For(node, db)
     {
         var path , html = [], child;
-        path = getPath(node, "select");
+        path = getPath(node, SELECT);
         child = getChildNode(node);
-        var _this = valueOf.call(this, path, db)["object"];
+        var _this = getValue.call(this, path, db).object;
         for (var t = 0; t < _this.length; t++)
         {
             html.push(insertDB.call(_this[t], child, db));
@@ -195,9 +211,9 @@
     function Switch(node, db)
     {
         var path, html = [], child;
-        path = getPath(node, "select");
+        path = getPath(node, SELECT);
         child = getChildNode(node);
-        var _this = valueOf.call(this, path, db)["object"];
+        var _this = getValue.call(this, path, db).object;
         for (var n = 0; n < child.length; n++)
         {
             path = getPath(child[n], 'test');
@@ -215,13 +231,14 @@
      */
     function If(node, db)
     {
-        var path, html = [], value, n, reg;
+        var path, html = [], value, n, val;
         path = getPath(node, "test");
         for (n in node)
         {
-            reg = /value=("|')([^\1]+)\1/g;
-            value = reg.exec(n)[2];
-            if (valueOf.call(this, path, db)["string"] == value)
+            REG_IF_VALUE.lastIndex = 0;
+            value = REG_IF_VALUE.exec(n)[2];
+            val = getValue.call(this, path, db);
+            if ((getValue.call(this, path, db).string == value) == (n.indexOf("not") == -1))
             {
                 html.push(insertDB.call(this, getChildNode(node), db))
             }
@@ -238,8 +255,9 @@
     function createHtml(argList, nodeName)
     {
         var arr = [];
-        var node = argList.shift();
-        do {
+        var node;
+        while (node = argList.shift())
+        {
             if (node.indexOf('</') == 0)
             {
                 if (getNodeName(node) == nodeName)
@@ -249,7 +267,7 @@
             }
             else if (node.indexOf('<') == 0)
             {
-                if (node.indexOf('/>') != -1)
+                if (node.indexOf('/>') != -1 || REG_VOID_ELEMENTS.test(node))
                 {
                     arr.push(node);
                 }
@@ -264,14 +282,14 @@
             {
                 arr.push(node);
             }
-        } while (node = argList.shift());
+        }
         return arr;
     }
 
     /**
      * @description 插入数据
-     * @param format
-     * @param DB
+     * @param {Array}format
+     * @param {JSON}DB
      * @returns {Array}
      */
     function insertDB(format, DB)
@@ -286,7 +304,6 @@
                 {
                     for (nodeName in node)
                     {
-
                         DHtmlList.push(StringValueOf.call(this, nodeName, DB));
                         DHtmlList.push(insertDB.call(this, node[nodeName], DB));
                         DHtmlList.push("</" + getNodeName(nodeName) + ">");
@@ -326,16 +343,17 @@
     /**
      * @description 链接数组生成HTML
      * @param {Array} htmlList
-     * @param {String} tab
      * @return {String}
      */
-    function LinkHtmlList(htmlList, tab)
+    function linkHtmlList(htmlList)
     {
-        for (var i = 0; i < htmlList.length; i++)
+        var str = "", i = 0, t;
+        for (; i < htmlList.length; i++)
         {
-            htmlList[i] = Object.prototype.toString.call(htmlList[i]) == "[object Array]" ? LinkHtmlList(htmlList[i], tab + '    ') : tab + htmlList[i];
+            t = htmlList[i];
+            str += typeof t === STRING ? t : linkHtmlList(t);
         }
-        return htmlList.join("\n");
+        return str;
     }
 
     /**
@@ -343,16 +361,16 @@
      * @param {JSON}json
      * @return {JSON}
      */
-    function ClearNull(json)
+    function clearNull(json)
     {
         var node;
-        var arrTag = Object.prototype.toString.call(json) == "[object Object]";
+        var arrTag = Object.prototype.toString.call(json) == OBJECT_ARR;
         for (node in json)
         {
             if (arrTag && node == "indexOf")continue;
-            if (typeof json[node] == "object")
+            if (typeof json[node] === OBJECT && json[node] != null)
             {
-                json[node] = ClearNull(json[node]);
+                json[node] = clearNull(json[node]);
             }
             if (json[node] == null)
             {
@@ -366,11 +384,20 @@
      * 处理ＨＴＭＬ类型部分
      * @param Template
      */
-    function docType(Template)
+    function pretreatment(Template)
     {
+        REG_DOC_TYPE.lastIndex = 0;
+        var docType = REG_DOC_TYPE.exec(Template);
+        var n = Template.indexOf("<!--"), e;
+        while (n != -1)
+        {
+            e = Template.indexOf("-->", n);
+            Template = Template.substring(0, n) + Template.substring(e + 3);
+            n = Template.indexOf("<!--");
+        }
         return {
-            "docType": Reg.docType.exec(Template),
-            "html"   : Template.replace(Reg, '').replace(Reg.notes, '')
+            "docType": docType,
+            "html"   : Template
         };
     }
 
@@ -382,22 +409,17 @@
     function jsonView(json, Template)
     {
         //清理json数据中的null
-        json = ClearNull(json);
-
+        json = clearNull(json);
         //整理模板，清除模板中的注释，分离出docType
-        var doc = docType(Template);
-
+        var doc = pretreatment(Template);
         //构造初始队列
-        var Templates = doc.html.match(Reg.node);
-
+        var Templates = doc.html.match(REG_NODE);
         //队列分层
-        var HTMLObj = createHtml(Templates, '');
-
+        var HTMLObj = createHtml(Templates || [], '');
         //压入数据
         var html = insertDB.call(json, HTMLObj, json);
-
         //链接HTML
-        return doc.docType || '' + LinkHtmlList(html, '');
+        return doc.docType || '' + linkHtmlList(html);
     }
 
     return (function ()
