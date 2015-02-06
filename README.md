@@ -35,3 +35,19 @@ path:
 注:
 * 1.path必需是一个对像
 * 2.test的值是path的一个子节点,当这个节点存在时,执行test,并将这个节点设良当前路径.
+
+## if判断:
+```html
+<json:if test="path" value="value">
+	
+</json:if>
+```
+```html
+<json:if test="path" value="value" not>
+	
+</json:if>
+```
+注：
+* path为指向某个特定值的路径
+* value仅支持字符串类型
+* 可使用在json:if中增加not属性来获得!=判断。
